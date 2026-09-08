@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人 AI 能力評估表單</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<style>
+  body { font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  .likert-label { transition: all .15s ease; }
+  .likert-input:checked + .likert-label {
+    background-color: #4f46e5;
+    color: #fff;
+    border-color: #4f46e5;
+  }
+  .fade-in { animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+<div class="max-w-3xl mx-auto px-4 py-8">
+
+  <!-- 頁首 -->
+  <header class="mb-6">
+    <p class="text-xs text-slate-400 mb-1">依《AI產業人才認定指引》AI產業人才賦能範本教材製作 · CC-BY 數位發展部數位產業署、財團法人人工智慧科技基金會（ADI、AIF）</p>
+    <h1 class="text-2xl font-bold text-indigo-700">個人 AI 能力評估表單</h1>
+  </header>
+
+  <!-- 進度條 -->
+  <div id="progressWrap" class="mb-6 hidden">
+    <div class="flex justify-between text-xs text-slate-500 mb-1">
+      <span id="progressLabel">步驟</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="w-full bg-slate-200 rounded-full h-2">
+      <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+    </div>
+  </div>
+
+  <main id="app" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6"></main>
+
+  <footer class="text-center text-xs text-slate-400 mt-8">
+    本評估旨在了解個人於各能力面向之現況程度，作為後續學習與能力提升之參考依據，無標準答案。<br>
+    本頁僅於瀏覽器本機運算，不會上傳或儲存任何填答內容。
+  </footer>
+</div>
+
+<script>
+/* ============ 資料定義（依官方問卷原文） ============ */
+
+const COMPETENCIES = {
+  "AI技術應用": "評估人才對AI工具的實際操作與技巧掌握程度。",
+  "業務問題解決": "評估人才應用AI來完成特定工作、解決具體業務場景問題的能力。",
+  "AI應用與場景整合": "評估人才是否能掌握主流AI應用的基本邏輯，並基於業務需求，精準地構思出AI解決方案的用途與價值。",
+  "數據識讀與治理": "評估人才對AI背後數據的原理、限制、風險的理解程度，以及對資料品質的敏感度。",
+  "協作與領導": "評估人才的知識分享意願、教導他人以及在團隊中發揮AI影響力的能力。"
+};
+const COMPETENCY_ORDER = ["AI技術應用", "業務問題解決", "AI應用與場景整合", "數據識讀與治理", "協作與領導"];
+
+const TOOLS = [
+  "ChatGPT","Notta","Gamma","Midjourney","Microsoft Copilot","Otter.ai","Canva AI","DALL-E 3",
+  "Gemini","Whisper","Napkin","Stable Diffusion","Claude","Perplexity AI","Beautiful.ai",
+  "Adobe Firefly","Runway","Notion AI","Zapier","Make","Pika Labs","n8n","Kaiber","Power Automate"
+];
+
+const ROLES = ["專案管理","行政管理","媒體行銷","IT","顧問服務","財務會計","人力資源","美編設計"];
+
+const LIKERT = [
+  { v: 5, label: "非常符合" },
+  { v: 4, label: "符合" },
+  { v: 3, label: "普通" },
+  { v: 2, label: "不符合" },
+  { v: 1, label: "非常不符合" }
+];
+
+// 題組一～七（每組5題，依序對應：AI技術應用／業務問題解決／數據識讀與治理／AI應用與場景整合／AI應用與場景整合）
+const SCENARIOS = [
+  {
+    key: "plan", title: "題組一、企劃案與標案撰寫",
+    questions: [
+      { text: "我能熟練運用AI工具（如ChatGPT），透過精準的提示語（Prompt）生成企劃案或標案所需的核心架構與內容草稿？", comp: "AI技術應用" },
+      { text: "在撰寫企劃案前，我能將模糊的需求轉化為具體的指令，例如定義目標讀者、關鍵訴求與期望風格，以引導AI產出方向正確的內容？", comp: "業務問題解決" },
+      { text: "我知道在哪裡找到供AI所需的背景資料（如市場數據、客戶資訊、過往案例），並能判斷AI引用資訊的正確性，進行事實查核與修正？", comp: "數據識讀與治理" },
+      { text: "當AI產出初稿後，我能從邏輯連貫性、語氣專業度及內容完整性等角度進行評估，並透過追問或重新指令引導AI修正，提升產出品質？", comp: "AI應用與場景整合" },
+      { text: "我能將AI協作產出的內容，結合自身的專業知識與判斷，進行最終的潤飾與整合，確保整份企劃案或標案不僅內容完整，更能精準達成預期目標（如：說服客戶、符合標案要求）？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    key: "meeting", title: "題組二、會議記錄與語音轉文字",
+    questions: [
+      { text: "我能熟練操作主流的語音轉文字工具（如Notta, Whisper等），並完成錄音上傳、即時轉錄與文字檔匯出等基本設定？", comp: "AI技術應用" },
+      { text: "在會議或訪談前，我能根據參與人數、語言、專業術語多寡等情境，選擇最適合的AI轉錄工具與記錄方式（如：即時轉錄或會後上傳）？", comp: "業務問題解決" },
+      { text: "我了解語音辨識的基本原理與影響準確度的因素（如語速、口音、錄音品質）？", comp: "數據識讀與治理" },
+      { text: "在AI產出逐字稿後，我能快速校對並修正內容中的錯字、人名、專業術語、標點符號及斷句等錯誤，確保文稿的準確性？", comp: "AI應用與場景整合" },
+      { text: "我能將校正後的逐字稿，進一步提煉與重構成一份重點清晰、包含待辦事項與決議的正式會議紀錄，使其精準符合團隊溝通與歸檔的目的？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    key: "slide", title: "題組三、簡報製作與設計",
+    questions: [
+      { text: "我能熟練操作AI簡報工具（如Gamma, Tome等），完成內容生成、版面設計、風格美化等核心功能？", comp: "AI技術應用" },
+      { text: "我能將簡報的溝通目的，拆解成清晰的指令或大綱（如：定義核心主題、設定聽眾、規劃敘事架構），以引導AI產出結構完整的內容？", comp: "業務問題解決" },
+      { text: "我能為AI提供簡報所需的正確資訊與數據，導入符合主題或品牌規範的視覺元素（如：Logo、標準色），以確保內容的真實性與視覺一致性？", comp: "數據識讀與治理" },
+      { text: "在AI生成簡報初稿後，我能從「內容邏輯」與「視覺美感」兩個層面進行評估，並透過修改提示或手動微調，來修正不通順、不精準或排版不佳之處？", comp: "AI應用與場景整合" },
+      { text: "我能將AI生成的內容，結合自身的專業見解與案例進行深化，並進行最終排練與整合，確保簡報不僅美觀、有料，更能達成溝通、提案、報告等預期目的？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    key: "video", title: "題組四、影音生成",
+    questions: [
+      { text: "我能熟練操作AI影音生成工具（如Runway, Pika等），完成文生影音、圖生影音，並調整運鏡或動態強度等參數設定？", comp: "AI技術應用" },
+      { text: "我能將動態場景或短篇故事的構想，轉化為結構化的提示語（Prompt），透過描述角色、動作與氛圍來引導AI生成連貫的影音片段？", comp: "業務問題解決" },
+      { text: "我能提供符合需求的圖像或視覺風格作為AI生成影音的參考數據，並了解其在智慧財產權與倫理上的潛在風險？", comp: "數據識讀與治理" },
+      { text: "在AI生成影音片段後，我能從「動態流暢度」、「主題關聯性」與「畫面品質」等角度進行評估，並透過修改提示語或重新生成來修正不理想之處？", comp: "AI應用與場景整合" },
+      { text: "我能將AI生成的影音片段進行後製（如：剪輯、配樂、上字），並整合進專案（如：行銷影片、社群內容）中，確保最終成品能達成預期的宣傳或溝通目的？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    key: "image", title: "題組五、圖片生成",
+    questions: [
+      { text: "我能熟練操作AI圖像生成工具（如Midjourney, DALL-E等），並使用調整圖像比例、風格參數設定與圖像微調（Vary/Remix）等核心功能？", comp: "AI技術應用" },
+      { text: "我能將腦中的視覺畫面，拆解成包含主題、風格、構圖、光線與氛圍等元素的詳細提示語，以精準引導AI生成符合想像的圖像？", comp: "業務問題解決" },
+      { text: "我能導入參考圖片（以圖生圖）或品牌關鍵字作為AI生成圖像的數據基礎，並了解在提示語中指定藝術家風格可能涉及的版權問題？", comp: "數據識讀與治理" },
+      { text: "在AI生成圖像後，我能從「構圖美感」、「細節合理性」與「風格一致性」等角度進行評估，並透過修改提示語或使用變化功能來修正瑕疵、提升品質？", comp: "AI應用與場景整合" },
+      { text: "我能從AI生成的多張圖像中，挑選出最符合專案需求的成果，並將其應用於簡報封面、社群貼文或行銷素材中，確保圖像能精準傳達預期的視覺訊息與品牌形象？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    key: "data", title: "題組六、資料處理、筆記與知識管理",
+    questions: [
+      { text: "我能熟練操作AI工具（如Notion AI, ChatGPT等），對大量文字或表格資料執行摘要、分類、重組與清洗等任務？", comp: "AI技術應用" },
+      { text: "在整理新領域的知識前，我能定義出清晰的學習目標與分類框架，並透過提問或指令，引導AI將零散資訊整理成有系統、有結構的知識筆記？", comp: "業務問題解決" },
+      { text: "在讓AI處理資料前，我能先評估來源資料的品質（如：真實性、完整性、關聯性），並進行必要的篩選與預處理，以確保輸入數據的品質？", comp: "數據識讀與治理" },
+      { text: "當AI完成資料的摘要、分類或清洗後，我能審核其產出的邏輯性與準確性，並修正AI可能產生的錯誤歸類或失真詮釋？", comp: "AI應用與場景整合" },
+      { text: "我能將AI整理好的筆記或數據，有效地整合進我個人或團隊的知識管理系統中，確保這些資訊在未來易於查找、應用與共享？", comp: "AI應用與場景整合" }
+    ]
+  },
+  {
+    // 官方原文件中，題組七與題組六文字完全相同（原文件重複，非本站誤植）
+    key: "workflow", title: "題組七、工作流程優化",
+    questions: [
+      { text: "我能熟練操作AI工具（如Notion AI, ChatGPT等），對大量文字或表格資料執行摘要、分類、重組與清洗等任務？", comp: "AI技術應用" },
+      { text: "在整理新領域的知識前，我能定義出清晰的學習目標與分類框架，並透過提問或指令，引導AI將零散資訊整理成有系統、有結構的知識筆記？", comp: "業務問題解決" },
+      { text: "在讓AI處理資料前，我能先評估來源資料的品質（如：真實性、完整性、關聯性），並進行必要的篩選與預處理，以確保輸入數據的品質？", comp: "數據識讀與治理" },
+      { text: "當AI完成資料的摘要、分類或清洗後，我能審核其產出的邏輯性與準確性，並修正AI可能產生的錯誤歸類或失真詮釋？", comp: "AI應用與場景整合" },
+      { text: "我能將AI整理好的筆記或數據，有效地整合進我個人或團隊的知識管理系統中，確保這些資訊在未來易於查找、應用與共享？", comp: "AI應用與場景整合" }
+    ]
+  }
+];
+const SCENARIO_OPTIONS = [
+  { key: "plan", label: "企劃案與標案撰寫" },
+  { key: "meeting", label: "會議記錄與語音轉文字" },
+  { key: "slide", label: "簡報製作與設計" },
+  { key: "video", label: "影音生成" },
+  { key: "image", label: "圖片生成" },
+  { key: "data", label: "資料處理、筆記與知識管理" },
+  { key: "workflow", label: "工作流程優化" }
+];
+
+const TEAM_QUESTIONS = [
+  "當團隊成員在使用AI工具遇到困難時，我樂於主動提供協助或分享我的經驗？",
+  "我曾主動在部門或團隊會議中，分享我對AI工具的使用心得或成功案例？",
+  "我能夠與不同職能的同事協作，共同探討如何將AI應用到跨部門的工作流程中？",
+  "在團隊中，我能扮演「AI布道者」的角色，鼓勵並引導其他成員嘗試使用新工具？",
+  "我曾主動為團隊建立與AI應用相關的共享資源或知識庫（如：共用的Prompt指令、工具教學文件等）？"
+];
+
+/* ============ 狀態 ============ */
+const state = {
+  step: 0,           // 0=說明, 1=基本資料, 2=能力自評, 3..N=動態題組, N+1=團隊協作, N+2=結果
+  basic: { name: "", dept: "", title: "", role: "" },
+  tools: [],
+  toolsUsage: "",
+  scenarios: [],
+  groupAnswers: {},   // { scenarioKey: [val,val,val,val,val] }
+  teamAnswers: [null, null, null, null, null]
+};
+
+function selectedScenarioObjs() {
+  return state.scenarios.map(k => SCENARIOS.find(s => s.key === k));
+}
+function totalSteps() {
+  // 0說明 + 1基本資料 + 2能力自評 + N動態題組 + 團隊協作 + 結果
+  return 4 + state.scenarios.length;
+}
+
+/* ============ 計分 ============ */
+function computeScores() {
+  const acc = {};
+  COMPETENCY_ORDER.forEach(c => acc[c] = { sum: 0, count: 0 });
+
+  selectedScenarioObjs().forEach(sc => {
+    const answers = state.groupAnswers[sc.key] || [];
+    sc.questions.forEach((q, i) => {
+      const val = answers[i];
+      if (val) { acc[q.comp].sum += val; acc[q.comp].count += 1; }
+    });
+  });
+  state.teamAnswers.forEach(val => {
+    if (val) { acc["協作與領導"].sum += val; acc["協作與領導"].count += 1; }
+  });
+
+  const result = {};
+  COMPETENCY_ORDER.forEach(c => {
+    result[c] = acc[c].count > 0 ? +(acc[c].sum / acc[c].count).toFixed(2) : null;
+  });
+  return result;
+}
+
+function interpretation(score) {
+  if (score === null) return { text: "本次未作答相關題目", color: "text-slate-400" };
+  if (score >= 4.0) return { text: "對相關概念具良好至深入理解，能獨立應用並進行延伸判斷。", color: "text-emerald-600" };
+  if (score >= 3.0) return { text: "具基本理解，於部分情境下可應用，仍有精進空間。", color: "text-amber-600" };
+  return { text: "理解有限或尚未建立完整概念，建議加強學習與練習。", color: "text-rose-600" };
+}
+
+/* ============ 畫面渲染 ============ */
+const app = document.getElementById("app");
+const progressWrap = document.getElementById("progressWrap");
+const progressBar = document.getElementById("progressBar");
+const progressPct = document.getElementById("progressPct");
+const progressLabel = document.getElementById("progressLabel");
+
+function updateProgress() {
+  if (state.step === 0) { progressWrap.classList.add("hidden"); return; }
+  progressWrap.classList.remove("hidden");
+  const last = totalSteps();
+  const pct = Math.min(100, Math.round((state.step / last) * 100));
+  progressBar.style.width = pct + "%";
+  progressPct.textContent = pct + "%";
+  progressLabel.textContent = `步驟 ${state.step} / ${last}`;
+}
+
+function render() {
+  updateProgress();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (state.step === 0) return renderIntro();
+  if (state.step === 1) return renderBasic();
+  if (state.step === 2) return renderSelfAssess();
+  const scenarioIdx = state.step - 3;
+  if (scenarioIdx < state.scenarios.length) return renderScenario(scenarioIdx);
+  if (scenarioIdx === state.scenarios.length) return renderTeam();
+  return renderResult();
+}
+
+function html(strings, ...values) { return strings.reduce((acc, s, i) => acc + s + (values[i] ?? ""), ""); }
+
+function renderIntro() {
+  app.innerHTML = html`
+    <div class="fade-in space-y-4">
+      <h2 class="text-lg font-semibold text-slate-800">評估說明</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">本評估旨在了解個人於各能力面向之現況程度，以作為後續學習與能力提升之參考依據。本問卷為能力評估，<b>無標準答案</b>，請依實際理解程度填答。</p>
+      <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-slate-700 space-y-2">
+        <p class="font-medium text-indigo-700">評估方式</p>
+        <p>本量表採 5 點量尺進行評定：</p>
+        <ul class="list-disc list-inside space-y-1">
+          <li>非常符合（5分）：對相關概念具充分理解，能進行應用與延伸判斷</li>
+          <li>符合（4分）：對相關概念具良好理解，能獨立完成判斷</li>
+          <li>普通（3分）：對相關概念具基本理解，在提示下可完成部分判斷</li>
+          <li>不符合（2分）：對相關概念具初步認知，但理解不完整，需提示協助</li>
+          <li>非常不符合（1分）：對相關概念無認知，無法理解題目內容</li>
+        </ul>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-600">
+        <p class="font-medium text-slate-700 mb-1">題組作答方式</p>
+        <p>問卷中「工作應用能力」部分，請先勾選您日常工作中最常使用 AI 的情境（1～3 項），系統將只顯示對應題組，其餘可略過。</p>
+      </div>
+      <button onclick="goStep(1)" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition">開始填答</button>
+    </div>
+  `;
+}
+
+function renderBasic() {
+  const b = state.basic;
+  app.innerHTML = html`
+    <div class="fade-in space-y-5">
+      <h2 class="text-lg font-semibold text-slate-800">【基本資料】</h2>
+      <div class="grid gap-4">
+        <label class="block text-sm">
+          <span class="text-slate-600">姓名</span>
+          <input id="f_name" type="text" value="${b.name}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </label>
+        <label class="block text-sm">
+          <span class="text-slate-600">部門</span>
+          <input id="f_dept" type="text" value="${b.dept}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </label>
+        <label class="block text-sm">
+          <span class="text-slate-600">職稱</span>
+          <input id="f_title" type="text" value="${b.title}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </label>
+        <div class="block text-sm">
+          <span class="text-slate-600">主要職能</span>
+          <div class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            ${ROLES.map(r => html`
+              <label class="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600">
+                <input type="radio" name="role" value="${r}" class="hidden" ${b.role === r ? "checked" : ""} onchange="setBasicRole('${r}')">
+                ${r}
+              </label>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-between pt-2">
+        <button onclick="goStep(0)" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">上一步</button>
+        <button onclick="submitBasic()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-lg transition">下一步</button>
+      </div>
+    </div>
+  `;
+}
+function setBasicRole(r) { state.basic.role = r; }
+function submitBasic() {
+  state.basic.name = document.getElementById("f_name").value.trim();
+  state.basic.dept = document.getElementById("f_dept").value.trim();
+  state.basic.title = document.getElementById("f_title").value.trim();
+  goStep(2);
+}
+
+function renderSelfAssess() {
+  app.innerHTML = html`
+    <div class="fade-in space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800">【AI 能力自評】</h2>
+
+      <div>
+        <p class="text-sm font-medium text-slate-700 mb-2">1. 您日常工作中，較常使用哪些 AI 工具？（多選）</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          ${TOOLS.map(t => html`
+            <label class="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-xs cursor-pointer has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600">
+              <input type="checkbox" class="tool-cb hidden" value="${t}" ${state.tools.includes(t) ? "checked" : ""}>
+              ${t}
+            </label>
+          `).join("")}
+        </div>
+      </div>
+
+      <div>
+        <p class="text-sm font-medium text-slate-700 mb-2">2. 承上題，請您針對上述所選其中 3 項工具，說明您如何使用在工作中。（問答題）</p>
+        <textarea id="f_toolsUsage" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="例如：使用 ChatGPT 撰寫會議摘要與客戶信件初稿…">${state.toolsUsage}</textarea>
+      </div>
+
+      <div>
+        <p class="text-sm font-medium text-slate-700 mb-1">3. 請您勾選日常工作中，使用 AI 做什麼工作？（選擇 1～3 項）</p>
+        <p class="text-xs text-slate-400 mb-2">系統將依所選項目，僅顯示對應題組。</p>
+        <div id="scenarioBox" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          ${SCENARIO_OPTIONS.map(s => html`
+            <label class="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-sm cursor-pointer has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600">
+              <input type="checkbox" class="scenario-cb hidden" value="${s.key}" ${state.scenarios.includes(s.key) ? "checked" : ""}>
+              ${s.label}
+            </label>
+          `).join("")}
+        </div>
+        <p id="scenarioWarn" class="text-xs text-rose-500 mt-2 hidden">請至少勾選 1 項、最多勾選 3 項。</p>
+      </div>
+
+      <div class="flex justify-between pt-2">
+        <button onclick="goStep(1)" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">上一步</button>
+        <button onclick="submitSelfAssess()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-lg transition">下一步</button>
+      </div>
+    </div>
+  `;
+
+  // 限制最多勾選3項情境
+  document.querySelectorAll(".scenario-cb").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const checked = document.querySelectorAll(".scenario-cb:checked");
+      if (checked.length > 3) { cb.checked = false; }
+    });
+  });
+}
+function submitSelfAssess() {
+  state.tools = Array.from(document.querySelectorAll(".tool-cb:checked")).map(el => el.value);
+  state.toolsUsage = document.getElementById("f_toolsUsage").value.trim();
+  const scenarios = Array.from(document.querySelectorAll(".scenario-cb:checked")).map(el => el.value);
+  if (scenarios.length < 1 || scenarios.length > 3) {
+    document.getElementById("scenarioWarn").classList.remove("hidden");
+    return;
+  }
+  state.scenarios = scenarios;
+  scenarios.forEach(k => { if (!state.groupAnswers[k]) state.groupAnswers[k] = [null, null, null, null, null]; });
+  goStep(3);
+}
+
+function likertRow(name, currentVal, onChange) {
+  return html`
+    <div class="grid grid-cols-5 gap-1.5">
+      ${LIKERT.map(l => html`
+        <label class="relative">
+          <input type="radio" name="${name}" value="${l.v}" class="likert-input hidden" ${currentVal === l.v ? "checked" : ""} onchange="${onChange}(${l.v})">
+          <span class="likert-label block text-center text-xs border border-slate-300 rounded-lg py-2 cursor-pointer hover:bg-slate-50">${l.label}<br><span class="text-[10px] opacity-70">${l.v}分</span></span>
+        </label>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderScenario(idx) {
+  const sc = selectedScenarioObjs()[idx];
+  const answers = state.groupAnswers[sc.key];
+  app.innerHTML = html`
+    <div class="fade-in space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800">【工作應用能力】</h2>
+      <p class="text-sm text-indigo-600 font-medium">${sc.title}</p>
+      <div class="space-y-6">
+        ${sc.questions.map((q, i) => html`
+          <div>
+            <p class="text-sm text-slate-700 mb-2">${i + 1}. ${q.text}</p>
+            ${likertRow(`q_${sc.key}_${i}`, answers[i], `setScenarioAnswer_${sc.key}_${i}`)}
+            <p class="text-[11px] text-slate-400 mt-1">對應能力：${q.comp}</p>
+          </div>
+        `).join("")}
+      </div>
+      <div class="flex justify-between pt-2">
+        <button onclick="goStep(${state.step - 1})" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">上一步</button>
+        <button onclick="submitScenario('${sc.key}', ${idx})" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-lg transition">下一步</button>
+      </div>
+      <p id="scWarn_${sc.key}" class="text-xs text-rose-500 hidden text-right">請完成本題組所有題目再繼續。</p>
+    </div>
+  `;
+  // 動態產生每題的 change handler（掛在 window 上，因為 inline onchange 需要全域函式）
+  sc.questions.forEach((q, i) => {
+    window[`setScenarioAnswer_${sc.key}_${i}`] = (v) => { state.groupAnswers[sc.key][i] = v; };
+  });
+}
+function submitScenario(key, idx) {
+  const answers = state.groupAnswers[key];
+  if (answers.some(v => v === null)) {
+    document.getElementById(`scWarn_${key}`).classList.remove("hidden");
+    return;
+  }
+  goStep(4 + idx);
+}
+
+function renderTeam() {
+  app.innerHTML = html`
+    <div class="fade-in space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800">【團隊與協作】</h2>
+      <div class="space-y-6">
+        ${TEAM_QUESTIONS.map((q, i) => html`
+          <div>
+            <p class="text-sm text-slate-700 mb-2">${i + 1}. ${q}</p>
+            ${likertRow(`team_${i}`, state.teamAnswers[i], `setTeamAnswer_${i}`)}
+            <p class="text-[11px] text-slate-400 mt-1">對應能力：協作與領導</p>
+          </div>
+        `).join("")}
+      </div>
+      <div class="flex justify-between pt-2">
+        <button onclick="goStep(${state.step - 1})" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">上一步</button>
+        <button onclick="submitTeam()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-lg transition">查看結果</button>
+      </div>
+      <p id="teamWarn" class="text-xs text-rose-500 hidden text-right">請完成所有題目再查看結果。</p>
+    </div>
+  `;
+  TEAM_QUESTIONS.forEach((_, i) => {
+    window[`setTeamAnswer_${i}`] = (v) => { state.teamAnswers[i] = v; };
+  });
+}
+function submitTeam() {
+  if (state.teamAnswers.some(v => v === null)) {
+    document.getElementById("teamWarn").classList.remove("hidden");
+    return;
+  }
+  goStep(state.step + 1);
+}
+
+let chartInstance = null;
+function renderResult() {
+  const scores = computeScores();
+  app.innerHTML = html`
+    <div class="fade-in space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800">評估結果</h2>
+      <p class="text-sm text-slate-500">${state.basic.name || "您"} · ${state.basic.dept || "-"} · ${state.basic.title || "-"} · ${state.basic.role || "-"}</p>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <canvas id="scoreChart" height="220"></canvas>
+      </div>
+
+      <div class="space-y-3">
+        ${COMPETENCY_ORDER.map(c => {
+          const s = scores[c];
+          const it = interpretation(s);
+          return html`
+            <div class="border border-slate-200 rounded-lg p-4">
+              <div class="flex items-center justify-between">
+                <p class="font-medium text-slate-800">${c}</p>
+                <p class="font-semibold ${it.color}">${s === null ? "—" : s.toFixed(2)}</p>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">${COMPETENCIES[c]}</p>
+              <p class="text-xs mt-2 ${it.color}">${it.text}</p>
+            </div>
+          `;
+        }).join("")}
+      </div>
+
+      <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-xs text-slate-600">
+        <p class="font-medium text-indigo-700 mb-1">結果判讀標準（官方公式）</p>
+        <p>各能力平均分 = 該能力所有題目分數總和 ÷ 題目數</p>
+        <p>4.0 以上：良好至深入理解，能獨立應用並延伸判斷。　3.0–3.9：具基本理解，仍有精進空間。　3.0 以下：理解有限，建議加強學習。</p>
+      </div>
+
+      <div class="flex justify-between pt-2">
+        <button onclick="goStep(${state.step - 1})" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">上一步</button>
+        <button onclick="restart()" class="px-4 py-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium">重新填答</button>
+      </div>
+    </div>
+  `;
+
+  const ctx = document.getElementById("scoreChart");
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: COMPETENCY_ORDER,
+      datasets: [{
+        label: "平均分數",
+        data: COMPETENCY_ORDER.map(c => scores[c] ?? 0),
+        backgroundColor: COMPETENCY_ORDER.map(c => {
+          const s = scores[c];
+          if (s === null) return "#cbd5e1";
+          if (s >= 4.0) return "#10b981";
+          if (s >= 3.0) return "#f59e0b";
+          return "#f43f5e";
+        }),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function restart() {
+  state.step = 0;
+  state.basic = { name: "", dept: "", title: "", role: "" };
+  state.tools = [];
+  state.toolsUsage = "";
+  state.scenarios = [];
+  state.groupAnswers = {};
+  state.teamAnswers = [null, null, null, null, null];
+  render();
+}
+
+function goStep(n) { state.step = n; render(); }
+
+render();
+</script>
+</body>
+</html>
