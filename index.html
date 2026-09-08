@@ -170,7 +170,7 @@ const TEAM_QUESTIONS = [
 /* ============ 狀態 ============ */
 const state = {
   step: 0,           // 0=說明, 1=基本資料, 2=能力自評, 3..N=動態題組, N+1=團隊協作, N+2=結果
-  basic: { name: "", dept: "", title: "", role: "" },
+  basic: { name: "", company: "", dept: "", title: "", role: "" },
   tools: [],
   toolsUsage: "",
   scenarios: [],
@@ -282,10 +282,15 @@ function renderBasic() {
   app.innerHTML = html`
     <div class="fade-in space-y-5">
       <h2 class="text-lg font-semibold text-slate-800">【基本資料】</h2>
+      <p class="text-xs text-slate-400">以下資料僅顯示於本次結果頁，不會上傳或儲存，皆可留空跳過。</p>
       <div class="grid gap-4">
         <label class="block text-sm">
           <span class="text-slate-600">姓名</span>
           <input id="f_name" type="text" value="${b.name}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </label>
+        <label class="block text-sm">
+          <span class="text-slate-600">公司</span>
+          <input id="f_company" type="text" value="${b.company}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
         </label>
         <label class="block text-sm">
           <span class="text-slate-600">部門</span>
@@ -317,6 +322,7 @@ function renderBasic() {
 function setBasicRole(r) { state.basic.role = r; }
 function submitBasic() {
   state.basic.name = document.getElementById("f_name").value.trim();
+  state.basic.company = document.getElementById("f_company").value.trim();
   state.basic.dept = document.getElementById("f_dept").value.trim();
   state.basic.title = document.getElementById("f_title").value.trim();
   goStep(2);
@@ -474,7 +480,7 @@ function renderResult() {
   app.innerHTML = html`
     <div class="fade-in space-y-6">
       <h2 class="text-lg font-semibold text-slate-800">評估結果</h2>
-      <p class="text-sm text-slate-500">${state.basic.name || "您"} · ${state.basic.dept || "-"} · ${state.basic.title || "-"} · ${state.basic.role || "-"}</p>
+      <p class="text-sm text-slate-500">${state.basic.name || "您"} · ${state.basic.company || "-"} · ${state.basic.dept || "-"} · ${state.basic.title || "-"} · ${state.basic.role || "-"}</p>
 
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
         <canvas id="scoreChart" height="320"></canvas>
@@ -549,7 +555,7 @@ function renderResult() {
 
 function restart() {
   state.step = 0;
-  state.basic = { name: "", dept: "", title: "", role: "" };
+  state.basic = { name: "", company: "", dept: "", title: "", role: "" };
   state.tools = [];
   state.toolsUsage = "";
   state.scenarios = [];
